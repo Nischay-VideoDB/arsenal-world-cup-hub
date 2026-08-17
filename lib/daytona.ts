@@ -1,5 +1,6 @@
 // Daytona — run Python in an ephemeral sandbox, capture stdout + matplotlib chart PNGs.
 import { Daytona } from "@daytona/sdk";
+import { chartPngs } from "./daytona-artifacts";
 
 export interface PyRun {
   stdout: string;
@@ -23,11 +24,7 @@ export async function runPython(code: string): Promise<PyRun> {
     const result = asRecord(res);
     const artifacts = asRecord(result.artifacts);
     const stdout = String(artifacts.stdout ?? result.result ?? "");
-    const chartArtifacts = Array.isArray(artifacts.charts) ? artifacts.charts : [];
-    const charts = chartArtifacts
-      .map(asRecord)
-      .map((chart) => chart.png)
-      .filter((png): png is string => typeof png === "string");
+    const charts = chartPngs(artifacts);
     return { stdout, charts };
   } catch (e) {
     return { stdout: "", charts: [], error: e instanceof Error ? e.message : String(e) };
