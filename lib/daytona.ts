@@ -23,7 +23,8 @@ export async function runPython(code: string): Promise<PyRun> {
     const result = asRecord(res);
     const artifacts = asRecord(result.artifacts);
     const stdout = String(artifacts.stdout ?? result.result ?? "");
-    const charts = Array.isArray(artifacts.charts)
+    const chartArtifacts = Array.isArray(artifacts.charts) ? artifacts.charts : [];
+    const charts = chartArtifacts
       .map(asRecord)
       .map((chart) => chart.png)
       .filter((png): png is string => typeof png === "string");
