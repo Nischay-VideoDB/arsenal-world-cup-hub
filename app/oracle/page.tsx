@@ -65,11 +65,10 @@ export default function OraclePage() {
             PLAYER ORACLE
           </h1>
           <p style={{ fontSize: 14, color: "#7A7A7A", marginTop: 8, maxWidth: 640 }}>
-            Pick a Gunner and the Oracle has{" "}
-            <strong style={{ color: "#10182E" }}>Kimi K2.7-code write a Monte-Carlo simulation</strong> of
-            their nation&apos;s next match, then runs it live in a{" "}
-            <strong style={{ color: "#10182E" }}>Daytona sandbox</strong> to project win probability and the
-            player&apos;s expected impact.
+            The public showcase starts with a{" "}
+            <strong style={{ color: "#10182E" }}>prepared deterministic projection</strong> from the tracked
+            roster context. In operator-configured live mode, Kimi K2.7-code writes a Monte-Carlo simulation
+            and a Daytona sandbox runs it to project win probability and the player&apos;s expected impact.
           </p>
         </div>
 

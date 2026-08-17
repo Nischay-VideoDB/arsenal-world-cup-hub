@@ -2,7 +2,7 @@ import type { HeroStats } from "@/lib/gunners";
 
 function Stat({ value, label, accent }: { value: string | number; label: string; accent?: boolean }) {
   return (
-    <div className="flex flex-col">
+    <div className="flex min-w-0 flex-col">
       <span
         className="font-display"
         style={{ fontSize: 34, lineHeight: "100%", color: accent ? "#F00000" : "#FFFFFF" }}
@@ -30,13 +30,13 @@ export function Hero({ stats }: { stats: HeroStats }) {
         <br />
         THE WORLD CUP
       </h1>
-      <div className="mt-9 flex items-stretch gap-7">
+      <div className="mt-9 grid grid-cols-2 gap-x-6 gap-y-6 sm:flex sm:items-stretch sm:gap-7">
         <Stat value={stats.players} label="PLAYERS" />
-        <div style={{ width: 1, background: "rgba(255,255,255,0.18)" }} />
+        <div className="hidden sm:block" style={{ width: 1, background: "rgba(255,255,255,0.18)" }} />
         <Stat value={stats.nations} label="NATIONS" />
-        <div style={{ width: 1, background: "rgba(255,255,255,0.18)" }} />
+        <div className="hidden sm:block" style={{ width: 1, background: "rgba(255,255,255,0.18)" }} />
         <Stat value={stats.liveNow} label="LIVE NOW" accent />
-        <div style={{ width: 1, background: "rgba(255,255,255,0.18)" }} />
+        <div className="hidden sm:block" style={{ width: 1, background: "rgba(255,255,255,0.18)" }} />
         <Stat value={stats.goals} label="GOALS SO FAR" />
       </div>
     </header>
