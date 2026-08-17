@@ -133,6 +133,6 @@ Requirements (follow EXACTLY):
     chart,
     parsed: parseResult(run.stdout),
     usedFallback,
-    error: run.error ?? null,
+    error: run.error ? "The simulation runner was unavailable. A verified fallback was used." : null,
   });
 }

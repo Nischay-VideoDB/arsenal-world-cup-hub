@@ -65,7 +65,6 @@ export async function POST(req: Request) {
   });
 
   return result.toUIMessageStreamResponse({
-    onError: (e) =>
-      e instanceof Error ? e.message : "The Gunners Desk is unavailable right now — try again.",
+    onError: () => "The Gunners Desk is unavailable right now - try again.",
   });
 }

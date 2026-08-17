@@ -6,6 +6,9 @@ export const maxDuration = 60;
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export async function GET(req: Request) {
   const q = new URL(req.url).searchParams.get("q")?.trim() || "goal";
+  if (q.length > 160) {
+    return Response.json({ query: q.slice(0, 160), playerUrl: null, shots: [], count: 0, error: "Search queries must be 160 characters or fewer." }, { status: 400 });
+  }
   if (!process.env.VIDEO_DB_API_KEY) {
     return Response.json({ query: q, playerUrl: null, shots: [], count: 0, error: "VideoDB not configured" });
   }
@@ -31,13 +34,14 @@ export async function GET(req: Request) {
     }
 
     return Response.json({ query: q, playerUrl, shots, count: shots.length, error: null });
-  } catch (e) {
+  } catch {
+    console.error("VideoDB goals search failed");
     return Response.json({
       query: q,
       playerUrl: null,
       shots: [],
       count: 0,
-      error: e instanceof Error ? e.message : "search failed",
+      error: "Search is temporarily unavailable. Please try again.",
     });
   }
 }

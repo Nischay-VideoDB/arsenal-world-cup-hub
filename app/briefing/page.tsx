@@ -47,24 +47,39 @@ export default function BriefingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchBriefing = useCallback(async () => {
+    const r = await fetch("/api/briefing");
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json() as { text?: string };
+    return j.text ?? "";
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const r = await fetch("/api/briefing");
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const j = await r.json();
-      setText(j.text ?? "");
+      setText(await fetchBriefing());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load briefing.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchBriefing]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    let active = true;
+    void fetchBriefing()
+      .then((nextText) => {
+        if (active) setText(nextText);
+      })
+      .catch((e: unknown) => {
+        if (active) setError(e instanceof Error ? e.message : "Failed to load briefing.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, [fetchBriefing]);
 
   return (
     <div className="flex min-h-screen flex-col">
