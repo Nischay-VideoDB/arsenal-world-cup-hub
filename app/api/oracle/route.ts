@@ -2,6 +2,7 @@ import { generateText } from "ai";
 import { tokenrouter, MODELS } from "@/lib/ai";
 import { runPython } from "@/lib/daytona";
 import { gunnersSnapshot, type Gunner } from "@/lib/gunners";
+import { preparedOracleProjection } from "@/lib/prepared-public";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -88,6 +89,22 @@ export async function POST(req: Request) {
   const g = gunnersSnapshot.find((x) => x.key === playerKey) ?? gunnersSnapshot[0];
   const opp = opponentOf(g);
 
+  if (
+    process.env.OPERATOR_LIVE_MODE !== "enabled" ||
+    !process.env.TOKENROUTER_API_KEY ||
+    !process.env.DAYTONA_API_KEY
+  ) {
+    return Response.json({
+      player: { name: g.name, nation: g.nation, position: g.position, number: g.number, opponent: opp, key: g.key },
+      code: fallbackScript(g),
+      chart: null,
+      parsed: preparedOracleProjection(g),
+      usedFallback: true,
+      prepared: true,
+      error: null,
+    });
+  }
+
   const prompt = `Write a COMPLETE, self-contained Python script that runs a Monte Carlo simulation for a FIFA World Cup 2026 match.
 
 Player: ${g.name} (${g.position}, #${g.number}) playing for ${g.nation} against ${opp}.
@@ -133,6 +150,7 @@ Requirements (follow EXACTLY):
     chart,
     parsed: parseResult(run.stdout),
     usedFallback,
+    prepared: false,
     error: run.error ? "The simulation runner was unavailable. A verified fallback was used." : null,
   });
 }

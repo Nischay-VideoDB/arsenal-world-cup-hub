@@ -44,21 +44,24 @@ function renderBriefing(text: string) {
 
 export default function BriefingPage() {
   const [text, setText] = useState("");
+  const [prepared, setPrepared] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchBriefing = useCallback(async () => {
     const r = await fetch("/api/briefing");
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const j = await r.json() as { text?: string };
-    return j.text ?? "";
+    const j = await r.json() as { text?: string; prepared?: boolean };
+    return { text: j.text ?? "", prepared: j.prepared === true };
   }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setText(await fetchBriefing());
+      const briefing = await fetchBriefing();
+      setText(briefing.text);
+      setPrepared(briefing.prepared);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load briefing.");
     } finally {
@@ -69,8 +72,11 @@ export default function BriefingPage() {
   useEffect(() => {
     let active = true;
     void fetchBriefing()
-      .then((nextText) => {
-        if (active) setText(nextText);
+      .then((briefing) => {
+        if (active) {
+          setText(briefing.text);
+          setPrepared(briefing.prepared);
+        }
       })
       .catch((e: unknown) => {
         if (active) setError(e instanceof Error ? e.message : "Failed to load briefing.");
@@ -114,9 +120,16 @@ export default function BriefingPage() {
           {!loading && !error && renderBriefing(text)}
         </div>
 
+        {!loading && prepared && (
+          <p style={{ marginTop: 16, fontSize: 12, fontWeight: 700, color: "#146B4A" }}>
+            PREPARED FALLBACK - deterministic briefing from the recorded Gunners snapshot; no model call was made.
+          </p>
+        )}
+
         <p style={{ marginTop: 28, fontSize: 11, color: "#9A9A9A" }}>
-          Auto-written via TokenRouter from the live Gunners Today tracker (Kimi powers the Ask agent &amp;
-          Oracle; the briefing uses a fast model for a snappy recap).
+          {prepared
+            ? "Prepared from the recorded Gunners snapshot."
+            : "Auto-written via TokenRouter from the live Gunners Today tracker (Kimi powers the Ask agent & Oracle; the briefing uses a fast model for a snappy recap)."}
         </p>
       </main>
     </div>

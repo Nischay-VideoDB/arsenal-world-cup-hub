@@ -1,8 +1,17 @@
-import { convertToModelMessages, streamText, tool, stepCountIs, type UIMessage } from "ai";
+import {
+  convertToModelMessages,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  streamText,
+  tool,
+  stepCountIs,
+  type UIMessage,
+} from "ai";
 import { z } from "zod";
 import { tokenrouter, MODELS } from "@/lib/ai";
 import { serpSearch } from "@/lib/brightdata";
 import { gunnersSnapshot } from "@/lib/gunners";
+import { preparedDeskReply } from "@/lib/prepared-public";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -25,6 +34,33 @@ export async function POST(req: Request) {
     return new Response("Invalid request body", { status: 400 });
   }
   const messages = parsed.data.messages as UIMessage[];
+
+  if (process.env.OPERATOR_LIVE_MODE !== "enabled" || !process.env.TOKENROUTER_API_KEY) {
+    const latestUserMessage = [...messages].reverse().find((message) => message.role === "user");
+    const question =
+      latestUserMessage?.parts.find((part) => part.type === "text")?.text ??
+      "Show the prepared Arsenal roster.";
+    const prepared = preparedDeskReply(question);
+    const stream = createUIMessageStream({
+      execute: ({ writer }) => {
+        writer.write({
+          type: "tool-input-available",
+          toolCallId: "prepared-squad-snapshot",
+          toolName: "squadInfo",
+          input: prepared.trace.input,
+        });
+        writer.write({
+          type: "tool-output-available",
+          toolCallId: "prepared-squad-snapshot",
+          output: prepared.trace,
+        });
+        writer.write({ type: "text-start", id: "prepared-answer" });
+        writer.write({ type: "text-delta", id: "prepared-answer", delta: prepared.text });
+        writer.write({ type: "text-end", id: "prepared-answer" });
+      },
+    });
+    return createUIMessageStreamResponse({ stream });
+  }
 
   const result = streamText({
     model: tokenrouter(MODELS.agent),

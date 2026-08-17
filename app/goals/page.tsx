@@ -6,7 +6,7 @@ import { SiteNav } from "@/components/SiteNav";
 import { gunnersSnapshot, deriveHeroStats } from "@/lib/gunners";
 
 const stats = deriveHeroStats(gunnersSnapshot);
-const SUGGESTIONS = ["Saka goal", "Ødegaard strike", "Martinelli finish", "free kick", "header", "long range screamer"];
+const SUGGESTIONS = ["Saka goal compilation"];
 
 interface Shot {
   start: number;
@@ -19,6 +19,14 @@ interface GoalsResult {
   shots: Shot[];
   count: number;
   error: string | null;
+  mode?: "prepared-source-corpus";
+  available?: boolean;
+  sourceUrl?: string | null;
+  sourceEmbedUrl?: string | null;
+  title?: string | null;
+  collectionId?: string;
+  videoId?: string | null;
+  provenance?: string;
 }
 
 const ts = (s: number) => {
@@ -27,6 +35,30 @@ const ts = (s: number) => {
   const sec = Math.floor(s % 60);
   return `${m}:${sec.toString().padStart(2, "0")}`;
 };
+
+function safePreparedEmbedUrl(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname === "www.youtube-nocookie.com" && url.pathname === "/embed/CjXnBXQWNb0" && !url.search
+      ? value
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function safePreparedSourceUrl(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname === "www.youtube.com" && url.pathname === "/watch" && url.searchParams.get("v") === "CjXnBXQWNb0"
+      ? value
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function GoalsPage() {
   const [input, setInput] = useState("");
@@ -74,9 +106,9 @@ export default function GoalsPage() {
             ARSENAL GOALS
           </h1>
           <p style={{ fontSize: 14, color: "#7A7A7A", marginTop: 8, maxWidth: 640 }}>
-            Semantic search across Gunner goal highlights — type what you remember and{" "}
-            <strong style={{ color: "#10182E" }}>VideoDB</strong> finds the exact moments from the
-            commentary and stitches them into a playable supercut.
+            Operator-configured <strong style={{ color: "#10182E" }}>VideoDB</strong> can search Gunner
+            goal highlights and compile a supercut. This public showcase includes one prepared source-corpus
+            entry instead of a fresh semantic search.
           </p>
         </div>
 
@@ -91,7 +123,7 @@ export default function GoalsPage() {
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Search Gunner goals — e.g. 'Saka curler', 'free kick'…"
+            placeholder="Try the prepared Saka source compilation…"
             style={{ flex: 1, border: "none", borderRadius: 100, padding: "12px 18px", fontSize: 14, outline: "none", background: "transparent" }}
           />
           <button type="submit" disabled={loading} style={{ borderRadius: 100, padding: "12px 24px", fontSize: 14, fontWeight: 700, background: loading ? "#9AA3B2" : "#E30613", color: "#fff", cursor: "pointer" }}>
@@ -113,14 +145,18 @@ export default function GoalsPage() {
 
         {loading && (
           <p style={{ marginTop: 28, color: "#7A7A7A", fontSize: 14 }}>
-            <span className="live-dot">●</span> VideoDB is searching the commentary and compiling matching shots…
+            <span className="live-dot">●</span> Checking the prepared source corpus…
           </p>
         )}
 
         {result && !loading && (
           <div style={{ marginTop: 28 }}>
             <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.12em", color: "#E30613" }}>
-              {result.count} MOMENT{result.count === 1 ? "" : "S"} FOR “{result.query.toUpperCase()}”
+              {result.mode === "prepared-source-corpus"
+                ? result.available
+                  ? "PREPARED SOURCE-CORPUS FALLBACK"
+                  : "FRESH SEMANTIC SEARCH UNAVAILABLE"
+                : `${result.count} MOMENT${result.count === 1 ? "" : "S"} FOR “${result.query.toUpperCase()}”`}
             </div>
 
             {result.playerUrl ? (
@@ -132,10 +168,36 @@ export default function GoalsPage() {
                 playsInline
                 style={{ marginTop: 14, width: "100%", borderRadius: 8, background: "#000", aspectRatio: "16 / 9" }}
               />
+            ) : safePreparedEmbedUrl(result.sourceEmbedUrl) ? (
+              <div style={{ marginTop: 14 }}>
+                <iframe
+                  src={safePreparedEmbedUrl(result.sourceEmbedUrl) ?? undefined}
+                  title={result.title ?? "Prepared Bukayo Saka goal compilation"}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                  referrerPolicy="strict-origin-when-cross-origin"
+                  style={{ width: "100%", border: 0, borderRadius: 8, background: "#000", aspectRatio: "16 / 9" }}
+                />
+                <p style={{ marginTop: 10, fontSize: 13, color: "#4F4F4F" }}>
+                  {result.provenance}
+                  {safePreparedSourceUrl(result.sourceUrl) && (
+                    <>
+                      {" "}
+                      <a href={safePreparedSourceUrl(result.sourceUrl) ?? undefined} target="_blank" rel="noreferrer" style={{ color: "#E30613", fontWeight: 700 }}>
+                        Open the source compilation
+                      </a>
+                      .
+                    </>
+                  )}
+                </p>
+                <p style={{ marginTop: 8, fontSize: 11, color: "#9A9A9A" }}>
+                  Tracked VideoDB ingestion record - collection {result.collectionId} - video {result.videoId}
+                </p>
+              </div>
             ) : (
               <p style={{ marginTop: 14, fontSize: 14, color: "#7A7A7A" }}>
                 {result.error
-                  ? `No playable result (${result.error}).`
+                  ? result.error
                   : "No matching moments found — try another search."}
               </p>
             )}
@@ -156,8 +218,8 @@ export default function GoalsPage() {
         )}
 
         <p style={{ marginTop: 28, fontSize: 11, color: "#9A9A9A" }}>
-          Powered by VideoDB — spoken-word index + semantic search over Gunner goal highlights. (WC 2026 goals
-          are upcoming; these are real Arsenal goal compilations as stand-ins.)
+          Live mode uses VideoDB spoken-word indexing and semantic search over Gunner goal highlights. The
+          public source-corpus fallback is recorded provenance, not a fresh VideoDB search or compiled reel.
         </p>
       </main>
     </div>

@@ -1,4 +1,5 @@
 import { connect } from "videodb";
+import { preparedGoalsResult } from "@/lib/prepared-public";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -9,8 +10,8 @@ export async function GET(req: Request) {
   if (q.length > 160) {
     return Response.json({ query: q.slice(0, 160), playerUrl: null, shots: [], count: 0, error: "Search queries must be 160 characters or fewer." }, { status: 400 });
   }
-  if (!process.env.VIDEO_DB_API_KEY) {
-    return Response.json({ query: q, playerUrl: null, shots: [], count: 0, error: "VideoDB not configured" });
+  if (process.env.OPERATOR_LIVE_MODE !== "enabled" || !process.env.VIDEO_DB_API_KEY) {
+    return Response.json(preparedGoalsResult(q));
   }
   try {
     const conn = connect({ apiKey: process.env.VIDEO_DB_API_KEY });

@@ -9,10 +9,10 @@ import { gunnersSnapshot, deriveHeroStats } from "@/lib/gunners";
 const stats = deriveHeroStats(gunnersSnapshot);
 
 const SUGGESTIONS = [
-  "Which Gunners are live right now?",
+  "Which Gunners are in the prepared roster?",
   "Who's representing Spain at the World Cup?",
-  "What's the latest World Cup 2026 news?",
-  "How did Ødegaard's Norway get on?",
+  "Who is marked live in the prepared snapshot?",
+  "Show Arsenal's goalkeepers and defenders.",
 ];
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -21,6 +21,7 @@ function ToolTrace({ part }: { part: any }) {
   const running = part.state === "input-streaming" || part.state === "input-available";
   const query = part.input?.query ?? part.input?.nation ?? JSON.stringify(part.input ?? {});
   let output = part.output;
+  const prepared = output?.prepared === true;
   if (output && typeof output !== "string") output = output.results ?? JSON.stringify(output);
 
   return (
@@ -38,6 +39,11 @@ function ToolTrace({ part }: { part: any }) {
           TOOL
         </span>
         <span style={{ fontSize: 11, fontWeight: 700, color: "#E30613" }}>{name}</span>
+        {prepared && (
+          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", color: "#146B4A" }}>
+            PREPARED SNAPSHOT
+          </span>
+        )}
         <span style={{ fontSize: 10, color: running ? "#B58900" : "#7A7A7A" }}>
           {running ? "· running…" : "· done"}
         </span>
@@ -89,8 +95,8 @@ export default function AskPage() {
             ASK THE GUNNERS DESK
           </h1>
           <p style={{ fontSize: 14, color: "#7A7A7A", marginTop: 8 }}>
-            Live answers on Arsenal&apos;s players at World Cup 2026 — powered by Kimi K2.6 via
-            TokenRouter, with live web data from Bright Data. Watch the tool-trace as it works.
+            The public showcase answers roster questions from a prepared Arsenal snapshot and shows its
+            tool-trace. Live model and web answers require operator configuration.
           </p>
         </div>
 

@@ -31,6 +31,10 @@ Format (plain text, no markdown fences):
   // Deterministic on-brand fallback so the briefing is never blank.
   const deterministic = `THE GUNNERS ARE OUT IN FORCE\n\nLIVE NOW: ${fmt("LIVE")}.\n\nTODAY'S RESULTS: ${fmt("FT")}.\n\nCOMING UP: ${fmt("KO")}.`;
 
+  if (process.env.OPERATOR_LIVE_MODE !== "enabled" || !process.env.TOKENROUTER_API_KEY) {
+    return Response.json({ text: deterministic, generatedAt: "13 JUN 2026", stats, prepared: true });
+  }
+
   let text = "";
   try {
     // Claude-fast via TokenRouter: quick, non-reasoning — fits the function budget and demos
@@ -42,5 +46,5 @@ Format (plain text, no markdown fences):
   }
   if (!text) text = deterministic;
 
-  return Response.json({ text, generatedAt: "13 JUN 2026", stats });
+  return Response.json({ text, generatedAt: "13 JUN 2026", stats, prepared: false });
 }
