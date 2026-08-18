@@ -86,12 +86,15 @@ export default function GoalsPage() {
     const video = videoRef.current;
     if (!url || !video) return;
     let hls: Hls | undefined;
-    if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = url; // Safari native HLS
-    } else if (Hls.isSupported()) {
+    // Prefer MSE playback. Chromium can report native HLS support while still
+    // rejecting valid streams; hls.js recommends this ordering for browsers
+    // beyond platforms with reliable native HLS implementations.
+    if (Hls.isSupported()) {
       hls = new Hls();
       hls.loadSource(url);
       hls.attachMedia(video);
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = url; // Native fallback for Safari and other HLS platforms.
     }
     return () => hls?.destroy();
   }, [result?.playerUrl]);
