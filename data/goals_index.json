@@ -1,14 +1,21 @@
 {
-  "collectionId": "c-703aca49-a291-44ca-9923-4d2c79de8245",
+  "collectionId": "c-29ddcbc8-86e7-4f73-9713-49cc7c7053fd",
+  "sourceCollectionId": "c-703aca49-a291-44ca-9923-4d2c79de8245",
+  "migrationNote": "The original hackathon collection is no longer accessible to the production credential. These are production-owned ingestions of the same two tracked public sources.",
   "videos": [
     {
-      "videoId": "m-z-019ebfb8-42a5-7310-bb40-fb75eb564dff",
-      "title": "Every Bukayo Saka Goal Ever Scored For Arsenal | 2019 - Present | AFC At The World Cup"
+      "videoId": "m-z-01a01447-fe18-7281-9ebb-85e4147e6dde",
+      "title": "Every Bukayo Saka Goal Ever Scored For Arsenal | 2019 - Present | AFC At The World Cup",
+      "player": "Bukayo Saka",
+      "sourceUrl": "https://www.youtube.com/watch?v=CjXnBXQWNb0",
+      "sourceVideoId": "m-z-019ebfb8-42a5-7310-bb40-fb75eb564dff"
     },
     {
-      "videoId": "m-z-019ebfbb-062e-77b0-b9f6-8ea91c3a60f4",
+      "videoId": "m-z-01a01449-28f5-77c1-8929-3e0a1e803ed9",
       "title": "Martin Ødegaard - All 23 Goals for Arsenal",
-      "player": "Martin Ødegaard"
+      "player": "Martin Ødegaard",
+      "sourceUrl": "https://www.youtube.com/watch?v=6Akx-R8qQBM",
+      "sourceVideoId": "m-z-019ebfbb-062e-77b0-b9f6-8ea91c3a60f4"
     }
   ]
 }

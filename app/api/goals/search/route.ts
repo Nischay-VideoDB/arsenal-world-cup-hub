@@ -1,6 +1,13 @@
 import { connect } from "videodb";
 import { preparedGoalsResult } from "@/lib/prepared-public";
 import { beginRun, failRun, finishRun, requestIdentity } from "@/lib/live-store";
+import {
+  filterGoalShots,
+  GOAL_SEARCH_RESULT_THRESHOLD,
+  goalsCollectionId,
+  MIN_GOAL_SEARCH_SCORE,
+  scopedVideoIdForQuery,
+} from "@/lib/goals-corpus";
 import { headers } from "next/headers";
 
 export const runtime = "nodejs";
@@ -30,26 +37,42 @@ export async function GET(req: Request) {
   catch { return Response.json({ error: "Public demo rate limit reached." }, { status: 429 }); }
   try {
     const conn = connect({ apiKey: process.env.VIDEO_DB_API_KEY });
-    const coll = await conn.getCollection("default");
-    const res: any = await coll.search(q);
+    const collectionId = goalsCollectionId();
+    const coll = await conn.getCollection(collectionId);
+    const scopedVideoId = scopedVideoIdForQuery(q);
+    const searchTarget = scopedVideoId ? await coll.getVideo(scopedVideoId) : coll;
+    const res: any = await searchTarget.search(
+      q,
+      undefined,
+      undefined,
+      GOAL_SEARCH_RESULT_THRESHOLD,
+      MIN_GOAL_SEARCH_SCORE,
+    );
+    const accepted = filterGoalShots(res?.shots ?? [], q);
+    const shots = accepted.map(({ shot }) => shot);
 
-    const shots = (res?.shots ?? []).slice(0, 8).map((s: any) => ({
-      start: s.start ?? s.startTime,
-      end: s.end ?? s.endTime,
-      text: s.text ?? "",
-      videoId: s.videoId ?? s.video_id ?? null,
-    }));
-
-    let playerUrl: string | null = res?.playerUrl ?? null;
-    if (!playerUrl && typeof res?.compile === "function") {
+    let playerUrl: string | null = null;
+    if (shots.length && typeof res?.compile === "function") {
       try {
+        // Compile only the audited subset. Never expose a provider stream that
+        // may contain rejected videos or low-quality transcript fragments.
+        res.shots = accepted.map(({ raw }) => raw);
         playerUrl = await res.compile();
       } catch {
         /* compile unavailable */
       }
     }
 
-    const output = { query: q, playerUrl, shots, count: shots.length, error: null, mode: "videodb-live" };
+    const output = {
+      query: q,
+      playerUrl,
+      shots,
+      count: shots.length,
+      error: shots.length ? null : "No relevant indexed Gunner moments matched this search.",
+      mode: "videodb-live",
+      collectionId,
+      scopedVideoId,
+    };
     await finishRun(runId, "videodb-live", output);
     return Response.json(output);
   } catch (error) {
