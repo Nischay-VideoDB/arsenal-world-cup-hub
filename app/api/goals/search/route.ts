@@ -1,4 +1,4 @@
-import { connect } from "videodb";
+import { connect, InvalidRequestError } from "videodb";
 import { preparedGoalsResult } from "@/lib/prepared-public";
 import { beginRun, failRun, finishRun, requestIdentity } from "@/lib/live-store";
 import {
@@ -41,13 +41,32 @@ export async function GET(req: Request) {
     const coll = await conn.getCollection(collectionId);
     const scopedVideoId = scopedVideoIdForQuery(q);
     const searchTarget = scopedVideoId ? await coll.getVideo(scopedVideoId) : coll;
-    const res: any = await searchTarget.search(
-      q,
-      undefined,
-      undefined,
-      GOAL_SEARCH_RESULT_THRESHOLD,
-      MIN_GOAL_SEARCH_SCORE,
-    );
+    let res: any;
+    try {
+      res = await searchTarget.search(
+        q,
+        undefined,
+        undefined,
+        GOAL_SEARCH_RESULT_THRESHOLD,
+        MIN_GOAL_SEARCH_SCORE,
+      );
+    } catch (error) {
+      if (!(error instanceof InvalidRequestError) || !/no results found/i.test(error.message)) {
+        throw error;
+      }
+      const output = {
+        query: q,
+        playerUrl: null,
+        shots: [],
+        count: 0,
+        error: "No relevant indexed Gunner moments matched this search.",
+        mode: "videodb-live",
+        collectionId,
+        scopedVideoId,
+      };
+      await finishRun(runId, "videodb-live", output);
+      return Response.json(output);
+    }
     const accepted = filterGoalShots(res?.shots ?? [], q);
     const shots = accepted.map(({ shot }) => shot);
 
