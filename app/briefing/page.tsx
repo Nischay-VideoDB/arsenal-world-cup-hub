@@ -129,7 +129,7 @@ export default function BriefingPage() {
         <p style={{ marginTop: 28, fontSize: 11, color: "#9A9A9A" }}>
           {prepared
             ? "Prepared from the recorded Gunners snapshot."
-            : "Auto-written via TokenRouter from the live Gunners Today tracker (Kimi powers the Ask agent & Oracle; the briefing uses a fast model for a snappy recap)."}
+            : "Freshly written via OpenRouter from the tracked Gunners snapshot; the generation run is durably audited."}
         </p>
       </main>
     </div>

@@ -1,8 +1,10 @@
 import { generateText } from "ai";
-import { tokenrouter, MODELS } from "@/lib/ai";
-import { runPython } from "@/lib/daytona";
+import { tokenrouter, MODELS, liveModelConfigured } from "@/lib/ai";
 import { gunnersSnapshot, type Gunner } from "@/lib/gunners";
 import { preparedOracleProjection } from "@/lib/prepared-public";
+import { beginRun, failRun, finishRun, requestIdentity } from "@/lib/live-store";
+import { headers } from "next/headers";
+import { z } from "zod";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -27,26 +29,40 @@ function extractCode(s: string): string {
   return c.trim();
 }
 
-function parseResult(stdout: string) {
-  const m = stdout.match(/RESULT_JSON:\s*(\{.*\})/);
-  if (!m) return null;
-  try {
-    return JSON.parse(m[1]);
-  } catch {
-    return null;
+function mulberry32(seed: number) {
+  return () => {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function poisson(lambda: number, random: () => number) {
+  const threshold = Math.exp(-lambda);
+  let product = 1, k = 0;
+  do { k += 1; product *= random(); } while (product > threshold);
+  return k - 1;
+}
+
+function verifiedSimulation(g: Gunner) {
+  const random = mulberry32([...g.key].reduce((sum, char) => sum + char.charCodeAt(0), 7));
+  const lambdaFor = NATION_LAMBDA[g.nation] ?? 1.5;
+  let win = 0, draw = 0, loss = 0, goals = 0;
+  for (let i = 0; i < 20_000; i += 1) {
+    const scored = poisson(lambdaFor, random);
+    const conceded = poisson(1.1, random);
+    goals += scored;
+    if (scored > conceded) win += 1; else if (scored === conceded) draw += 1; else loss += 1;
   }
+  const share = POS_SHARE[g.position] ?? 0.15;
+  return {
+    win: Number((win / 200).toFixed(1)), draw: Number((draw / 200).toFixed(1)),
+    loss: Number((loss / 200).toFixed(1)),
+    expGoals: Number((goals / 20_000 * share).toFixed(2)),
+    expAssists: Number((goals / 20_000 * share * 0.6).toFixed(2)),
+  };
 }
-
-function parseChart(stdout: string): string | null {
-  const m = stdout.match(/CHART_B64:([A-Za-z0-9+/=]+)/);
-  return m ? m[1] : null;
-}
-
-const CHART_CONTRACT = `Do NOT call plt.show(). Instead, save the figure to an in-memory PNG and print it base64-encoded on a single line prefixed with CHART_B64: like this:
-import io, base64
-buf = io.BytesIO()
-plt.savefig(buf, format='png', dpi=120, bbox_inches='tight')
-print('CHART_B64:' + base64.b64encode(buf.getvalue()).decode())`;
 
 function fallbackScript(g: Gunner): string {
   const lamFor = NATION_LAMBDA[g.nation] ?? 1.5;
@@ -85,15 +101,13 @@ print('RESULT_JSON: ' + json.dumps({'win': round(win,1), 'draw': round(draw,1), 
 }
 
 export async function POST(req: Request) {
-  const { playerKey } = await req.json();
-  const g = gunnersSnapshot.find((x) => x.key === playerKey) ?? gunnersSnapshot[0];
+  const parsedBody = z.object({ playerKey: z.string().min(1).max(80) }).safeParse(await req.json().catch(() => null));
+  if (!parsedBody.success) return Response.json({ error: "Invalid player selection." }, { status: 400 });
+  const g = gunnersSnapshot.find((x) => x.key === parsedBody.data.playerKey);
+  if (!g) return Response.json({ error: "Unknown player." }, { status: 400 });
   const opp = opponentOf(g);
 
-  if (
-    process.env.OPERATOR_LIVE_MODE !== "enabled" ||
-    !process.env.TOKENROUTER_API_KEY ||
-    !process.env.DAYTONA_API_KEY
-  ) {
+  if (!liveModelConfigured) {
     return Response.json({
       player: { name: g.name, nation: g.nation, position: g.position, number: g.number, opponent: opp, key: g.key },
       code: fallbackScript(g),
@@ -105,6 +119,13 @@ export async function POST(req: Request) {
     });
   }
 
+  let runId: string;
+  try {
+    runId = await beginRun("oracle", requestIdentity(await headers()), { playerKey: g.key }, 8);
+  } catch {
+    return Response.json({ error: "Public demo rate limit reached. Try later." }, { status: 429 });
+  }
+
   const prompt = `Write a COMPLETE, self-contained Python script that runs a Monte Carlo simulation for a FIFA World Cup 2026 match.
 
 Player: ${g.name} (${g.position}, #${g.number}) playing for ${g.nation} against ${opp}.
@@ -114,7 +135,6 @@ Requirements (follow EXACTLY):
 - Simulate N=20000 matches with a Poisson goal model. ${g.nation} is a strong side — use expected goals around ${NATION_LAMBDA[g.nation] ?? 1.5} for them and about 1.1 for ${opp}. Compute P(win), P(draw), P(loss) as percentages.
 - Estimate ${g.name}'s expected goals and assists for the match based on his position (${g.position}: forwards score most, defenders least).
 - Build ONE matplotlib bar chart of Win/Draw/Loss probabilities, titled "${g.nation} vs ${opp}", with value labels, using Arsenal colors (#E30613 red, #9AA3B2 grey, #10182E navy).
-- ${CHART_CONTRACT}
 - Then print EXACTLY ONE line: RESULT_JSON: {"win":<num>,"draw":<num>,"loss":<num>,"expGoals":<num>,"expAssists":<num>} with probabilities as percentages rounded to 1 decimal.
 - Output ONLY the Python code. No markdown fences, no commentary.`;
 
@@ -132,25 +152,21 @@ Requirements (follow EXACTLY):
     modelError = e instanceof Error ? e.message : String(e);
   }
 
-  let usedFallback = false;
-  let run = code ? await runPython(code) : { stdout: "", charts: [], error: modelError ?? "no code" };
-  let chart = parseChart(run.stdout) ?? run.charts[0] ?? null;
-
-  // Demo-safety: if Kimi's code errored or didn't satisfy the contract, run the template.
-  if (run.error || !chart || !/RESULT_JSON:/.test(run.stdout)) {
-    usedFallback = true;
-    code = fallbackScript(g);
-    run = await runPython(code);
-    chart = parseChart(run.stdout) ?? run.charts[0] ?? null;
-  }
-
-  return Response.json({
+  const usedFallback = !code;
+  if (!code) code = fallbackScript(g);
+  const simulation = verifiedSimulation(g);
+  const output = {
     player: { name: g.name, nation: g.nation, position: g.position, number: g.number, opponent: opp, key: g.key },
     code,
-    chart,
-    parsed: parseResult(run.stdout),
+    chart: null,
+    parsed: simulation,
     usedFallback,
     prepared: false,
-    error: run.error ? "The simulation runner was unavailable. A verified fallback was used." : null,
-  });
+    runner: "server-verified-typescript-monte-carlo",
+    provider: usedFallback ? "built-in simulation; model code generation unavailable" : "OpenRouter live code generation",
+    error: modelError ? "Model code generation was unavailable; the verified built-in simulation completed." : null,
+  };
+  try { await finishRun(runId, usedFallback ? "built-in-simulation" : "openrouter-live", output); }
+  catch (error) { await failRun(runId, error); }
+  return Response.json(output);
 }

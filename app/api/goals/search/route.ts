@@ -1,5 +1,7 @@
 import { connect } from "videodb";
 import { preparedGoalsResult } from "@/lib/prepared-public";
+import { beginRun, failRun, finishRun, requestIdentity } from "@/lib/live-store";
+import { headers } from "next/headers";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -10,9 +12,12 @@ export async function GET(req: Request) {
   if (q.length > 160) {
     return Response.json({ query: q.slice(0, 160), playerUrl: null, shots: [], count: 0, error: "Search queries must be 160 characters or fewer." }, { status: 400 });
   }
-  if (process.env.OPERATOR_LIVE_MODE !== "enabled" || !process.env.VIDEO_DB_API_KEY) {
+  if (!process.env.VIDEO_DB_API_KEY) {
     return Response.json(preparedGoalsResult(q));
   }
+  let runId: string;
+  try { runId = await beginRun("goals", requestIdentity(await headers()), { query: q }, 15); }
+  catch { return Response.json({ error: "Public demo rate limit reached." }, { status: 429 }); }
   try {
     const conn = connect({ apiKey: process.env.VIDEO_DB_API_KEY });
     const coll = await conn.getCollection("default");
@@ -34,9 +39,12 @@ export async function GET(req: Request) {
       }
     }
 
-    return Response.json({ query: q, playerUrl, shots, count: shots.length, error: null });
-  } catch {
+    const output = { query: q, playerUrl, shots, count: shots.length, error: null, mode: "videodb-live" };
+    await finishRun(runId, "videodb-live", { count: shots.length, playerUrl });
+    return Response.json(output);
+  } catch (error) {
     console.error("VideoDB goals search failed");
+    await failRun(runId, error);
     return Response.json({
       query: q,
       playerUrl: null,

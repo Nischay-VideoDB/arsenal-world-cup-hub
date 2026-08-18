@@ -106,9 +106,8 @@ export default function GoalsPage() {
             ARSENAL GOALS
           </h1>
           <p style={{ fontSize: 14, color: "#7A7A7A", marginTop: 8, maxWidth: 640 }}>
-            Operator-configured <strong style={{ color: "#10182E" }}>VideoDB</strong> can search Gunner
-            goal highlights and compile a supercut. This public showcase includes one prepared source-corpus
-            entry instead of a fresh semantic search.
+            Search the indexed Gunner goal corpus with <strong style={{ color: "#10182E" }}>VideoDB</strong>
+            and play compiled matching moments. The prepared Saka source remains available as a quick example.
           </p>
         </div>
 
@@ -145,7 +144,7 @@ export default function GoalsPage() {
 
         {loading && (
           <p style={{ marginTop: 28, color: "#7A7A7A", fontSize: 14 }}>
-            <span className="live-dot">●</span> Checking the prepared source corpus…
+            <span className="live-dot">●</span> VideoDB is searching indexed goal moments…
           </p>
         )}
 

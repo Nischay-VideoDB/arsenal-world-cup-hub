@@ -11,16 +11,16 @@ A hub that tracks **Arsenal FC players competing for their national teams at the
 | Sponsor | Where it's used | What it does |
 |---|---|---|
 | **Bright Data** | Ask the Gunners Desk · player headshots | Live Google SERP + Web Unlocker. The Ask agent calls it as a tool for current scores/news; the squad headshots were scraped from arsenal.com through the Unlocker. |
-| **Kimi (K2.6 / K2.7-code)** | Ask · Oracle · Briefing | K2.6 is the agent brain (tool-calling) and the Briefing writer; K2.7-code writes the Oracle's Monte-Carlo simulation. |
-| **TokenRouter** | every model call | One OpenAI-compatible gateway; we swap `model` per task (`moonshotai/kimi-k2.6`, `moonshotai/kimi-k2.7-code`). |
-| **Daytona** | Player Oracle | Runs the Kimi-generated Python in an ephemeral sandbox and returns the win-probability chart PNG. |
+| **OpenRouter** | Ask · Oracle · Briefing | Runs the live desk agent, writes the inspectable Oracle proposal, and generates the briefing. |
+| **Azure PostgreSQL** | all fresh AI/search runs | Durable audit records plus per-requester public-demo cost bounds. |
+| **Verified runner** | Player Oracle | A bounded TypeScript Monte-Carlo engine computes 20,000 matches; no unavailable sandbox is claimed. |
 | **VideoDB** | Arsenal Goals | YouTube goal compilations ingested + spoken-word indexed; semantic search returns matching moments stitched into a playable HLS supercut. |
 
 ## The five modules
 
 1. **Gunners Today** (`/`) — player-first grid of the 15 Gunners with real arsenal.com headshots and a three-state status badge (LIVE / KO / FT), a navy hero with live stats, and All / In action / By nation filters.
 2. **Ask the Gunners Desk** (`/ask`) — streaming chat. Kimi (via TokenRouter) with two tools — `squadInfo` (the roster) and `searchWeb` (Bright Data) — and a **visible tool-trace** so you watch it work.
-3. **Player Oracle** (`/oracle`) — pick a Gunner → Kimi K2.7-code **writes** a Monte-Carlo match simulation → **Daytona** runs it → win/draw/loss probability + the player's expected goals/assists + the generated code.
+3. **Player Oracle** (`/oracle`) — pick a Gunner → the live model writes an inspectable Monte-Carlo proposal → a bounded server runner computes win/draw/loss probability and expected impact.
 4. **Arsenal Goals** (`/goals`) — semantic search over Gunner goal highlights via **VideoDB**; matching commentary moments are compiled into a playable supercut.
 5. **Daily Gunners Briefing** (`/briefing`) — Kimi auto-writes a recap of the Gunners' day from the live tracker.
 

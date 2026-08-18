@@ -8,10 +8,12 @@ import {
   type UIMessage,
 } from "ai";
 import { z } from "zod";
-import { tokenrouter, MODELS } from "@/lib/ai";
+import { tokenrouter, MODELS, liveModelConfigured } from "@/lib/ai";
 import { serpSearch } from "@/lib/brightdata";
 import { gunnersSnapshot } from "@/lib/gunners";
 import { preparedDeskReply } from "@/lib/prepared-public";
+import { beginRun, failRun, finishRun, requestIdentity } from "@/lib/live-store";
+import { headers } from "next/headers";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -35,7 +37,7 @@ export async function POST(req: Request) {
   }
   const messages = parsed.data.messages as UIMessage[];
 
-  if (process.env.OPERATOR_LIVE_MODE !== "enabled" || !process.env.TOKENROUTER_API_KEY) {
+  if (!liveModelConfigured) {
     const latestUserMessage = [...messages].reverse().find((message) => message.role === "user");
     const question =
       latestUserMessage?.parts.find((part) => part.type === "text")?.text ??
@@ -60,6 +62,13 @@ export async function POST(req: Request) {
       },
     });
     return createUIMessageStreamResponse({ stream });
+  }
+
+  let runId: string;
+  try {
+    runId = await beginRun("ask", requestIdentity(await headers()), { messageCount: messages.length });
+  } catch {
+    return new Response("Public demo rate limit reached. Try again later.", { status: 429 });
   }
 
   const result = streamText({
@@ -98,9 +107,15 @@ export async function POST(req: Request) {
         execute: async ({ query }) => ({ query, results: await serpSearch(query) }),
       }),
     },
+    onFinish: async ({ usage }) => {
+      await finishRun(runId, "openrouter-live", { usage });
+    },
   });
 
   return result.toUIMessageStreamResponse({
-    onError: () => "The Gunners Desk is unavailable right now - try again.",
+    onError: (error) => {
+      void failRun(runId, error);
+      return "The live model is unavailable right now - try again.";
+    },
   });
 }

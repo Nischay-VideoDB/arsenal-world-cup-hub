@@ -1,6 +1,8 @@
 import { generateText } from "ai";
-import { tokenrouter, MODELS } from "@/lib/ai";
+import { tokenrouter, MODELS, liveModelConfigured } from "@/lib/ai";
 import { gunnersSnapshot, deriveHeroStats } from "@/lib/gunners";
+import { beginRun, failRun, finishRun, requestIdentity } from "@/lib/live-store";
+import { headers } from "next/headers";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -31,9 +33,13 @@ Format (plain text, no markdown fences):
   // Deterministic on-brand fallback so the briefing is never blank.
   const deterministic = `THE GUNNERS ARE OUT IN FORCE\n\nLIVE NOW: ${fmt("LIVE")}.\n\nTODAY'S RESULTS: ${fmt("FT")}.\n\nCOMING UP: ${fmt("KO")}.`;
 
-  if (process.env.OPERATOR_LIVE_MODE !== "enabled" || !process.env.TOKENROUTER_API_KEY) {
+  if (!liveModelConfigured) {
     return Response.json({ text: deterministic, generatedAt: "13 JUN 2026", stats, prepared: true });
   }
+
+  let runId: string;
+  try { runId = await beginRun("briefing", requestIdentity(await headers()), { snapshot: stats }, 10); }
+  catch { return Response.json({ error: "Public demo rate limit reached." }, { status: 429 }); }
 
   let text = "";
   try {
@@ -43,8 +49,11 @@ Format (plain text, no markdown fences):
     text = res.text.trim();
   } catch (e) {
     console.error("briefing generation failed:", e);
+    await failRun(runId, e);
   }
   if (!text) text = deterministic;
 
-  return Response.json({ text, generatedAt: "13 JUN 2026", stats, prepared: false });
+  if (text !== deterministic) await finishRun(runId, "openrouter-live", { generated: true, length: text.length });
+
+  return Response.json({ text, generatedAt: "13 JUN 2026", stats, prepared: false, provider: text === deterministic ? "deterministic-fallback" : "openrouter-live" });
 }

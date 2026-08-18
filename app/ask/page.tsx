@@ -95,8 +95,8 @@ export default function AskPage() {
             ASK THE GUNNERS DESK
           </h1>
           <p style={{ fontSize: 14, color: "#7A7A7A", marginTop: 8 }}>
-            The public showcase answers roster questions from a prepared Arsenal snapshot and shows its
-            tool-trace. Live model and web answers require operator configuration.
+            Ask the live AI desk about the tracked Arsenal roster. Prepared roster answers remain available
+            if the model provider is temporarily unavailable; current web scores require Bright Data configuration.
           </p>
         </div>
 
