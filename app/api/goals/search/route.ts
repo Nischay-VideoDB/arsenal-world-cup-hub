@@ -1,4 +1,4 @@
-import { connect, InvalidRequestError } from "videodb";
+import { connect, InvalidRequestError, VideodbError } from "videodb";
 import { preparedGoalsResult } from "@/lib/prepared-public";
 import { beginRun, failRun, finishRun, requestIdentity } from "@/lib/live-store";
 import {
@@ -51,7 +51,8 @@ export async function GET(req: Request) {
         MIN_GOAL_SEARCH_SCORE,
       );
     } catch (error) {
-      if (!(error instanceof InvalidRequestError) || !/no results found/i.test(error.message)) {
+      const providerError = error instanceof InvalidRequestError || error instanceof VideodbError;
+      if (!providerError || !/no results found/i.test(error.message)) {
         throw error;
       }
       const output = {
