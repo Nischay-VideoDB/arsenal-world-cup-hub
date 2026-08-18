@@ -16,7 +16,17 @@ export async function GET(req: Request) {
     return Response.json(preparedGoalsResult(q));
   }
   let runId: string;
-  try { runId = await beginRun("goals", requestIdentity(await headers()), { query: q }, 15); }
+  try {
+    const start = await beginRun(
+      "goals", requestIdentity(await headers()), { query: q }, 15,
+      req.headers.get("idempotency-key"),
+    );
+    if (start.replayed) {
+      if (start.status === "done" && start.output) return Response.json(start.output);
+      return Response.json({ error: `The prior request is ${start.status}; use a new key to start another run.` }, { status: 409 });
+    }
+    runId = start.id;
+  }
   catch { return Response.json({ error: "Public demo rate limit reached." }, { status: 429 }); }
   try {
     const conn = connect({ apiKey: process.env.VIDEO_DB_API_KEY });
@@ -40,7 +50,7 @@ export async function GET(req: Request) {
     }
 
     const output = { query: q, playerUrl, shots, count: shots.length, error: null, mode: "videodb-live" };
-    await finishRun(runId, "videodb-live", { count: shots.length, playerUrl });
+    await finishRun(runId, "videodb-live", output);
     return Response.json(output);
   } catch (error) {
     console.error("VideoDB goals search failed");

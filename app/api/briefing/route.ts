@@ -1,13 +1,13 @@
 import { generateText } from "ai";
 import { tokenrouter, MODELS, liveModelConfigured } from "@/lib/ai";
 import { gunnersSnapshot, deriveHeroStats } from "@/lib/gunners";
-import { beginRun, failRun, finishRun, requestIdentity } from "@/lib/live-store";
+import { beginRun, finishRun, requestIdentity } from "@/lib/live-store";
 import { headers } from "next/headers";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-export async function GET() {
+export async function GET(req: Request) {
   const stats = deriveHeroStats(gunnersSnapshot);
   const fmt = (s: string) =>
     gunnersSnapshot
@@ -38,10 +38,21 @@ Format (plain text, no markdown fences):
   }
 
   let runId: string;
-  try { runId = await beginRun("briefing", requestIdentity(await headers()), { snapshot: stats }, 10); }
+  try {
+    const start = await beginRun(
+      "briefing", requestIdentity(await headers()), { snapshot: stats }, 10,
+      req.headers.get("idempotency-key"),
+    );
+    if (start.replayed) {
+      if (start.status === "done" && start.output) return Response.json(start.output);
+      return Response.json({ error: `The prior request is ${start.status}; use a new key to start another run.` }, { status: 409 });
+    }
+    runId = start.id;
+  }
   catch { return Response.json({ error: "Public demo rate limit reached." }, { status: 429 }); }
 
   let text = "";
+  let modelError: unknown;
   try {
     // Claude-fast via TokenRouter: quick, non-reasoning — fits the function budget and demos
     // TokenRouter's per-task routing (Kimi powers the agent + Oracle codegen; this is the snappy recap).
@@ -49,11 +60,15 @@ Format (plain text, no markdown fences):
     text = res.text.trim();
   } catch (e) {
     console.error("briefing generation failed:", e);
-    await failRun(runId, e);
+    modelError = e;
   }
   if (!text) text = deterministic;
 
-  if (text !== deterministic) await finishRun(runId, "openrouter-live", { generated: true, length: text.length });
-
-  return Response.json({ text, generatedAt: "13 JUN 2026", stats, prepared: false, provider: text === deterministic ? "deterministic-fallback" : "openrouter-live" });
+  const output = {
+    text, generatedAt: "13 JUN 2026", stats, prepared: false,
+    provider: text === deterministic ? "deterministic-fallback" : "openrouter-live",
+    error: modelError ? "Live briefing generation was unavailable; the deterministic briefing is shown." : null,
+  };
+  await finishRun(runId, output.provider, output);
+  return Response.json(output);
 }

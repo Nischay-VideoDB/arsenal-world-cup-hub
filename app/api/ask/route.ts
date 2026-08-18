@@ -66,7 +66,25 @@ export async function POST(req: Request) {
 
   let runId: string;
   try {
-    runId = await beginRun("ask", requestIdentity(await headers()), { messageCount: messages.length });
+    const start = await beginRun(
+      "ask", requestIdentity(await headers()), { messageCount: messages.length }, 20,
+      req.headers.get("idempotency-key"),
+    );
+    if (start.replayed) {
+      const prior = start.output as { text?: string } | null;
+      if (start.status !== "done" || !prior?.text) {
+        return new Response(`The prior request is ${start.status}; use a new key to start another run.`, { status: 409 });
+      }
+      const stream = createUIMessageStream({
+        execute: ({ writer }) => {
+          writer.write({ type: "text-start", id: "replayed-answer" });
+          writer.write({ type: "text-delta", id: "replayed-answer", delta: prior.text! });
+          writer.write({ type: "text-end", id: "replayed-answer" });
+        },
+      });
+      return createUIMessageStreamResponse({ stream });
+    }
+    runId = start.id;
   } catch {
     return new Response("Public demo rate limit reached. Try again later.", { status: 429 });
   }
@@ -107,8 +125,8 @@ export async function POST(req: Request) {
         execute: async ({ query }) => ({ query, results: await serpSearch(query) }),
       }),
     },
-    onFinish: async ({ usage }) => {
-      await finishRun(runId, "openrouter-live", { usage });
+    onFinish: async ({ usage, text }) => {
+      await finishRun(runId, "openrouter-live", { usage, text });
     },
   });
 

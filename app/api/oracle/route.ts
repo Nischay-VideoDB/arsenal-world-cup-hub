@@ -121,7 +121,15 @@ export async function POST(req: Request) {
 
   let runId: string;
   try {
-    runId = await beginRun("oracle", requestIdentity(await headers()), { playerKey: g.key }, 8);
+    const start = await beginRun(
+      "oracle", requestIdentity(await headers()), { playerKey: g.key }, 8,
+      req.headers.get("idempotency-key"),
+    );
+    if (start.replayed) {
+      if (start.status === "done" && start.output) return Response.json(start.output);
+      return Response.json({ error: `The prior request is ${start.status}; use a new key to start another run.` }, { status: 409 });
+    }
+    runId = start.id;
   } catch {
     return Response.json({ error: "Public demo rate limit reached. Try later." }, { status: 429 });
   }

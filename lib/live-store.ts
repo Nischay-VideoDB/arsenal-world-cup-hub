@@ -25,10 +25,15 @@ async function ensureSchema() {
       provider TEXT NOT NULL,
       status TEXT NOT NULL,
       error TEXT,
+      idempotency_key TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       completed_at TIMESTAMPTZ
     )
   `;
+  await sql`ALTER TABLE arsenal_demo_runs ADD COLUMN IF NOT EXISTS idempotency_key TEXT`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS arsenal_demo_runs_idempotency
+    ON arsenal_demo_runs (feature, requester_hash, idempotency_key)
+    WHERE idempotency_key IS NOT NULL`;
   return sql;
 }
 
@@ -38,19 +43,41 @@ export function requestIdentity(headers: Headers) {
   return crypto.createHash("sha256").update(`${salt}:${source}`).digest("hex");
 }
 
-export async function beginRun(feature: string, identity: string, input: unknown, limitPerHour = 20) {
+export type LiveRunStart = {
+  id: string;
+  replayed: boolean;
+  status: string;
+  output: unknown | null;
+};
+
+export async function beginRun(
+  feature: string,
+  identity: string,
+  input: unknown,
+  limitPerHour = 20,
+  idempotencyKey?: string | null,
+): Promise<LiveRunStart> {
   const sql = await ensureSchema();
   const id = crypto.randomUUID();
-  if (!sql) return id;
+  if (!sql) return { id, replayed: false, status: "running", output: null };
+  const key = idempotencyKey?.trim() || null;
+  if (key && key.length > 120) throw new Error("INVALID_IDEMPOTENCY_KEY");
+  if (key) {
+    const [existing] = await sql<{ id: string; status: string; output: unknown | null }[]>`
+      SELECT id, status, output FROM arsenal_demo_runs
+      WHERE feature=${feature} AND requester_hash=${identity} AND idempotency_key=${key}
+    `;
+    if (existing) return { ...existing, replayed: true };
+  }
   const [{ count }] = await sql<{ count: number }[]>`
     SELECT count(*)::int AS count FROM arsenal_demo_runs
     WHERE requester_hash=${identity} AND created_at > now() - interval '1 hour'
   `;
   if (count >= limitPerHour) throw new Error("PUBLIC_RATE_LIMIT");
   await sql`INSERT INTO arsenal_demo_runs
-    (id, feature, requester_hash, input, provider, status)
-    VALUES (${id}, ${feature}, ${identity}, ${sql.json(input as never)}, 'pending', 'running')`;
-  return id;
+    (id, feature, requester_hash, input, provider, status, idempotency_key)
+    VALUES (${id}, ${feature}, ${identity}, ${sql.json(input as never)}, 'pending', 'running', ${key})`;
+  return { id, replayed: false, status: "running", output: null };
 }
 
 export async function finishRun(id: string, provider: string, output: unknown) {
